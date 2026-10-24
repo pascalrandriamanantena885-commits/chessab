@@ -1,0 +1,36 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract project.tgz
+        run: tar xzf project.tgz
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+
+      - name: Build Stockfish (Android arm64, NDK)
+        run: |
+          git clone --depth 1 --branch sf_17.1 https://github.com/official-stockfish/Stockfish.git
+          export PATH="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          cd Stockfish/src
+          make -j4 build ARCH=armv8 COMP=ndk
+          mkdir -p ../../app/src/main/jniLibs/arm64-v8a
+          cp stockfish ../../app/src/main/jniLibs/arm64-v8a/libstockfish.so
+
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.9" }
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChessOffline-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
