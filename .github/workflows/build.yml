@@ -15,12 +15,18 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
 
-      - name: Build Stockfish (Android arm64, NDK)
+      - name: Build Stockfish 11 (Android arm64, NDK direct)
         run: |
           git clone --depth 1 --branch sf_11 https://github.com/official-stockfish/Stockfish.git
-          export PATH="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           cd Stockfish/src
-          make -j4 build ARCH=armv8 COMP=ndk
+          "$BIN/aarch64-linux-android24-clang++" -std=c++14 -O3 -DNDEBUG \
+            -DIS_64BIT -DUSE_POPCNT -DNO_PREFETCH -fno-exceptions -w \
+            -include cstdint -include cstring -include cstdlib \
+            -pie -static-libstdc++ \
+            *.cpp syzygy/*.cpp -o stockfish
+          "$BIN/llvm-strip" stockfish
+          ls -lh stockfish
           mkdir -p ../../app/src/main/jniLibs/arm64-v8a
           cp stockfish ../../app/src/main/jniLibs/arm64-v8a/libstockfish.so
 
