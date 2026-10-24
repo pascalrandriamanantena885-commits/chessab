@@ -17,7 +17,7 @@ jobs:
 
       - name: Build Stockfish (Android arm64, NDK)
         run: |
-          git clone --depth 1 --branch sf_17.1 https://github.com/official-stockfish/Stockfish.git
+          git clone --depth 1 --branch sf_11 https://github.com/official-stockfish/Stockfish.git
           export PATH="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           cd Stockfish/src
           make -j4 build ARCH=armv8 COMP=ndk
