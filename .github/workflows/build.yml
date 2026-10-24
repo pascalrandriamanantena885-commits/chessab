@@ -9,8 +9,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract project.tgz
-        run: tar xzf project.tgz
+      - name: Extract project archive
+        run: |
+          F="$(ls project*.tgz 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$F" ]; then echo "Tsy hita ny project*.tgz ao amin'ny fototry ny repo"; ls -la; exit 1; fi
+          echo "Mampiasa $F"
+          tar xzf "$F"
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
