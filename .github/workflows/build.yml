@@ -9,8 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract project.tgz
-        run: tar xzf project.tgz
+      - name: Extract project archive
+        run: |
+          # Maka ny rakitra project*.tgz vaovao indrindra eo amin'ny fototry ny repo
+          f=$(ls project*.tgz 2>/dev/null | sort -V | tail -n1)
+          if [ -z "$f" ]; then
+            echo "Tsy hita ny project*.tgz eo amin'ny fototry ny repo. Rakitra misy:"
+            ls -la
+            exit 1
+          fi
+          echo "Mampiasa: $f"
+          tar xzf "$f"
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
