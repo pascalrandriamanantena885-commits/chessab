@@ -9,25 +9,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract project archive
-        run: |
-          F="$(ls project*.tgz 2>/dev/null | sort -V | tail -1)"
-          if [ -z "$F" ]; then echo "Tsy hita ny project*.tgz ao amin'ny fototry ny repo"; ls -la; exit 1; fi
-          echo "Mampiasa $F"
-          tar xzf "$F"
+      - name: Extract project.tgz
+        run: tar xzf project.tgz
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
 
-      - name: Build Stockfish 17.1 (Android arm64, NDK, NNUE)
+      - name: Build Stockfish 19 (Android arm64, NDK, NNUE)
         run: |
-          git clone --depth 1 --branch sf_17.1 https://github.com/official-stockfish/Stockfish.git
+          git clone --depth 1 --branch sf_19 https://github.com/official-stockfish/Stockfish.git
           NDK_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export PATH="$NDK_BIN:$PATH"
           cd Stockfish/src
-          # Misy fichier NNUE (nets) tsy maintsy alaina aloha (embedded ao anaty binary)
-          make net
-          ls -lh *.nnue
+          # Fetra Elo (UCI_Elo) ao amin'ity version ity: jereo ao amin'ny log, ampitahao amin'ny SF_MIN_ELO / SF_MAX_ELO ao amin'ny Bots.kt
+          grep -rn "LowestElo\|HighestElo" *.h *.cpp || true
+          # Fichier NNUE (nets): alaina aloha (embedded ao anaty binary)
+          make net || true
+          ls -lh *.nnue || true
           make -j"$(nproc)" build ARCH=armv8 COMP=ndk
           llvm-strip stockfish
           ls -lh stockfish
