@@ -93,11 +93,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
-
-      # Release (minify + signing). Mila GitHub Secrets: KS_BASE64, KS_PASS, KEY_ALIAS, KEY_PASS
-      # Raha tsy misy secrets dia sonia amin'ny debug key (azo apetraka fa tsy azo ampiasaina amin'ny Play Store).
+      # Keystore TSY MIOVA (debug sy release samy mampiasa azy): GitHub Secrets KS_BASE64, KS_PASS, KEY_ALIAS, KEY_PASS
       - name: Decode keystore
         env: { KS_BASE64: "${{ secrets.KS_BASE64 }}" }
         run: |
@@ -107,14 +103,15 @@ jobs:
             echo "KS_PASS=${{ secrets.KS_PASS }}" >> "$GITHUB_ENV"
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
             echo "KEY_PASS=${{ secrets.KEY_PASS }}" >> "$GITHUB_ENV"
+          else
+            echo "::warning::TSY MISY KS_BASE64 - miova isaky ny build ny signature (App not installed raha manavao)"
           fi
 
-      - name: Build release APK (minified)
-        run: gradle assembleRelease --no-daemon
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
           name: KAJY-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/debug/*.apk
+          compression-level: 0
