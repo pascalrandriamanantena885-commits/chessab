@@ -1,0 +1,46 @@
+name: Perft (hetsika marina)
+on:
+  workflow_dispatch:
+    inputs:
+      deep:
+        description: "Depth fanampiny (maharitra kokoa)"
+        type: boolean
+        default: false
+  push:
+    paths: ["project*.tgz", ".github/workflows/perft.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  perft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract project archive
+        run: |
+          F=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
+          if [ -z "$F" ]; then echo "::error::Tsy hita ny project*.tgz"; ls -la; exit 1; fi
+          echo "Mampiasa $F"
+          tar xzf "$F"
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+
+      - name: Compile
+        run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/Perft.java
+
+      - name: Perft
+        run: |
+          set +e
+          java -cp cls mg.chess.offline.own.Perft ${{ inputs.deep && 'deep' || '' }} | tee perft.txt
+          rc=${PIPESTATUS[0]}
+          {
+            echo '### JORO perft'
+            echo '```'
+            grep -E 'PERFT|divide|^    ' perft.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
