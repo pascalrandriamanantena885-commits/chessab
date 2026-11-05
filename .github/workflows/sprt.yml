@@ -1,0 +1,69 @@
+name: SPRT (vaovao vs taloha)
+on:
+  workflow_dispatch:
+    inputs:
+      base_tgz:
+        description: "Dikan-teny taloha (anaran'ny .tgz). Foana = faharoa farany araka ny sort -V"
+        required: false
+        default: ""
+      games:
+        description: "Lalao ambony indrindra"
+        default: "3000"
+      movetime:
+        description: "ms isaky ny hetsika"
+        default: "100"
+      elo0:
+        description: "H0 (Elo)"
+        default: "0"
+      elo1:
+        description: "H1 (Elo)"
+        default: "10"
+
+permissions:
+  contents: read
+
+jobs:
+  sprt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract base + new
+        env:
+          BASE_IN: ${{ github.event.inputs.base_tgz }}
+        run: |
+          set -e
+          LIST=$(ls project*.tgz 2>/dev/null | sort -V)
+          NEW=$(echo "$LIST" | tail -1)
+          if [ -n "$BASE_IN" ]; then BASE="$BASE_IN"; else BASE=$(echo "$LIST" | tail -2 | head -1); fi
+          if [ -z "$NEW" ] || [ -z "$BASE" ] || [ "$NEW" = "$BASE" ]; then
+            echo "::error::Mila project*.tgz roa samy hafa (taloha sy vaovao)"; ls -la; exit 1
+          fi
+          echo "BASE=$BASE  NEW=$NEW"
+          mkdir base new
+          tar xzf "$BASE" -C base
+          tar xzf "$NEW" -C new
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+
+      - name: Install python-chess
+        run: pip install chess
+
+      - name: Compile base + new
+        run: |
+          set -e
+          mkdir cls_base cls_new
+          javac -d cls_base base/app/src/main/java/mg/chess/offline/own/*.java base/tools/OwnUci.java
+          javac -d cls_new  new/app/src/main/java/mg/chess/offline/own/*.java  new/tools/OwnUci.java
+
+      - name: SPRT
+        run: |
+          python3 new/tools/sprt.py cls_base cls_new \
+            --games "${{ github.event.inputs.games }}" \
+            --movetime "${{ github.event.inputs.movetime }}" \
+            --elo0 "${{ github.event.inputs.elo0 }}" \
+            --elo1 "${{ github.event.inputs.elo1 }}" \
+            --workers 2 | tee sprt.txt || true
+          { echo '### SPRT'; echo '```'; tail -3 sprt.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
