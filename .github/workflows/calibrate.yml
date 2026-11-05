@@ -1,5 +1,19 @@
 name: Calibrate own engine
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      levels:
+        description: "UCI_Elo (JSON array)"
+        default: "[2000,2200,2400,2600]"
+      games:
+        description: "Lalao ambony indrindra isaky ny ambaratonga"
+        default: "40"
+      movetime:
+        description: "ms isaky ny hetsika"
+        default: "1500"
+      target_ci:
+        description: "Janona raha ±Elo (95%) <= ity"
+        default: "45"
 
 permissions:
   contents: read
@@ -7,7 +21,11 @@ permissions:
 jobs:
   calibrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        level: ${{ fromJSON(inputs.levels) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,5 +45,33 @@ jobs:
       - name: Compile own engine
         run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/OwnUci.java
 
-      - name: Calibrate vs Stockfish UCI_Elo
-        run: python3 tools/calibrate.py cls 20 1500 2000 2200 2400 2600
+      - name: Calibrate vs Stockfish UCI_Elo=${{ matrix.level }}
+        run: |
+          python3 tools/calibrate.py cls --levels ${{ matrix.level }} \
+            --games ${{ inputs.games }} --movetime ${{ inputs.movetime }} \
+            --target-ci ${{ inputs.target_ci }} --workers 2 \
+            --out calib-${{ matrix.level }}.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calib-${{ matrix.level }}
+          path: calib-${{ matrix.level }}.json
+
+  summary:
+    needs: calibrate
+    if: always() && needs.calibrate.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract project archive
+        run: |
+          F=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
+          tar xzf "$F"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: calib-*
+          path: results
+          merge-multiple: true
+      - name: Aggregate
+        run: python3 tools/calibrate.py --aggregate results
