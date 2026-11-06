@@ -1,0 +1,115 @@
+name: Texel (mamoaka data + tuning an'ny Eval)
+on:
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: "Job miaraka amin'ny fanaovana data (JSON)"
+        default: "[0,1,2,3,4,5,6,7]"
+      games:
+        description: "Lalao isaky ny job (~0.4 s/lalao/core amin'ny depth 6)"
+        default: "4000"
+      depth:
+        description: "Depth ny lalao self-play"
+        default: "6"
+      movetime:
+        description: "ms ambony indrindra isaky ny hetsika"
+        default: "100"
+      groups:
+        description: "Parameter hotombanana: val,pass,w,pst (pst = ~770 parameter, lava)"
+        default: "val,pass,w"
+      passes:
+        description: "Isan'ny pass ambony indrindra"
+        default: "8"
+      minutes:
+        description: "Fetra fotoana ho an'ny tuning (min)"
+        default: "240"
+      first_game:
+        description: "Laharana lalao voalohany (ovay raha tsy te hamerina ny data teo aloha)"
+        default: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract project
+        run: |
+          NEW=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
+          [ -n "$NEW" ] || { echo "::error::Tsy hita ny project*.tgz"; exit 1; }
+          echo "Mampiasa $NEW"; tar xzf "$NEW"
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: Compile
+        run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/SelfPlay.java
+      - name: Self-play shard ${{ matrix.shard }}
+        env:
+          GAMES: ${{ github.event.inputs.games }}
+          DEPTH: ${{ github.event.inputs.depth }}
+          MT: ${{ github.event.inputs.movetime }}
+          FIRST: ${{ github.event.inputs.first_game }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          START=$(( FIRST + SHARD * GAMES ))
+          java -Xmx2g -cp cls mg.chess.offline.own.SelfPlay "$START" "$GAMES" "$DEPTH" "$MT" "games-$SHARD.txt" "$(nproc)" 8 | tail -3
+          gzip -f "games-$SHARD.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: texel-gen-${{ matrix.shard }}
+          path: games-${{ matrix.shard }}.txt.gz
+          retention-days: 7
+
+  tune:
+    needs: gen
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract project
+        run: |
+          NEW=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
+          [ -n "$NEW" ] || { echo "::error::Tsy hita ny project*.tgz"; exit 1; }
+          tar xzf "$NEW"
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: texel-gen-*
+          path: data
+          merge-multiple: true
+      - name: Compile
+        run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/Texel.java
+      - name: Tuning
+        env:
+          GROUPS_IN: ${{ github.event.inputs.groups }}
+          PASSES: ${{ github.event.inputs.passes }}
+          MINUTES: ${{ github.event.inputs.minutes }}
+        run: |
+          EXTRA=$(ls texel-extra*.gz 2>/dev/null || true)
+          ls -la data
+          java -Xmx6g -Dgroups="$GROUPS_IN" -Dpasses="$PASSES" -Dminutes="$MINUTES" \
+            -cp cls mg.chess.offline.own.Texel tuned.txt data/*.gz $EXTRA | tee texel.log
+          { echo '### Texel'; echo '```'; grep -E "DATA|^K=|PARAMS|PASS|FINAL" texel.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply + compile + perft
+        run: |
+          cp app/src/main/java/mg/chess/offline/own/Eval.java Eval.java
+          python3 tools/apply_tuned.py tuned.txt Eval.java
+          mkdir -p chk/mg/chess/offline/own
+          cp app/src/main/java/mg/chess/offline/own/*.java chk/mg/chess/offline/own/
+          cp Eval.java chk/mg/chess/offline/own/Eval.java
+          mkdir cls2 && javac -d cls2 chk/mg/chess/offline/own/*.java tools/Perft.java
+          java -cp cls2 mg.chess.offline.own.Perft | grep PERFT_SUMMARY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: texel-tuned
+          path: |
+            tuned.txt
+            Eval.java
+            texel.log
