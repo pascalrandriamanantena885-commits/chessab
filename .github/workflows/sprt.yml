@@ -56,7 +56,13 @@ jobs:
           set -e
           mkdir cls_base cls_new
           javac -d cls_base base/app/src/main/java/mg/chess/offline/own/*.java base/tools/OwnUci.java
-          javac -d cls_new  new/app/src/main/java/mg/chess/offline/own/*.java  new/tools/OwnUci.java
+          javac -d cls_new  new/app/src/main/java/mg/chess/offline/own/*.java  new/tools/OwnUci.java new/tools/Perft.java
+
+      - name: Perft gate (vaovao) - mijanona raha diso ny movegen
+        run: |
+          set -e
+          java -cp cls_new mg.chess.offline.own.Perft | tee perft.txt
+          { echo '### Perft (vaovao)'; echo '```'; grep PERFT_SUMMARY perft.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: SPRT
         run: |
