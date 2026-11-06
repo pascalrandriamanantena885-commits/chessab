@@ -12,7 +12,7 @@ on:
         default: ""
       variants:
         description: "Lisitra JSON: safidy UCI an'ny vaovao isaky ny SPRT. Ohatra [\"ProbCut=1\",\"CaptHist=1\",\"ContHist=1\"]. [\"\"] = tsy misy safidy"
-        default: '["ProbCut=1","CaptHist=1","ContHist=1"]'
+        default: '["SeePrune=1","HistPrune=1","Sing2=1","LmrTT=1","QsTT=1","Iir=1","TtEval=1","LmrCut=1","LmrHist2=1","NmpVerify=1","Eval2=1,Eval3=1"]'
       shards:
         description: "Job miaraka isaky ny variant (JSON), ohatra [0,1,2,3]"
         default: "[0,1,2,3]"
