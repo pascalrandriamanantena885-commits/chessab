@@ -18,6 +18,14 @@ on:
       elo1:
         description: "H1 (Elo)"
         default: "10"
+      opts_base:
+        description: "Safidy UCI an'ny taloha (ohatra HashBits=19)"
+        required: false
+        default: ""
+      opts_new:
+        description: "Safidy UCI an'ny vaovao (ohatra ProbCut=1,CaptHist=1). Azo atao ny tgz mitovy raha misy safidy"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -32,13 +40,16 @@ jobs:
       - name: Extract base + new
         env:
           BASE_IN: ${{ github.event.inputs.base_tgz }}
+          OPTS_B: ${{ github.event.inputs.opts_base }}
+          OPTS_N: ${{ github.event.inputs.opts_new }}
         run: |
           set -e
           LIST=$(ls project*.tgz 2>/dev/null | sort -V)
           NEW=$(echo "$LIST" | tail -1)
           if [ -n "$BASE_IN" ]; then BASE="$BASE_IN"; else BASE=$(echo "$LIST" | tail -2 | head -1); fi
-          if [ -z "$NEW" ] || [ -z "$BASE" ] || [ "$NEW" = "$BASE" ]; then
-            echo "::error::Mila project*.tgz roa samy hafa (taloha sy vaovao)"; ls -la; exit 1
+          if [ -z "$NEW" ] || [ -z "$BASE" ]; then echo "::error::Tsy hita ny project*.tgz"; ls -la; exit 1; fi
+          if [ "$NEW" = "$BASE" ] && [ -z "$OPTS_B$OPTS_N" ]; then
+            echo "::error::Mila project*.tgz roa samy hafa, na safidy (opts_base/opts_new) samy hafa"; ls -la; exit 1
           fi
           echo "BASE=$BASE  NEW=$NEW"
           mkdir base new
@@ -71,5 +82,7 @@ jobs:
             --movetime "${{ github.event.inputs.movetime }}" \
             --elo0 "${{ github.event.inputs.elo0 }}" \
             --elo1 "${{ github.event.inputs.elo1 }}" \
+            --opts-base "${{ github.event.inputs.opts_base }}" \
+            --opts-new "${{ github.event.inputs.opts_new }}" \
             --workers 2 | tee sprt.txt || true
           { echo '### SPRT'; echo '```'; tail -3 sprt.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
