@@ -4,13 +4,16 @@ on:
     inputs:
       levels:
         description: "UCI_Elo (JSON array)"
-        default: "[2000,2200,2400,2600]"
+        default: "[2400,2600,2800,3000]"
       games:
         description: "Lalao ambony indrindra isaky ny ambaratonga"
         default: "40"
       movetime:
         description: "ms isaky ny hetsika"
         default: "1500"
+      opts:
+        description: "Safidy UCI an'i JORO (ohatra Eval2=1,Eval3=1). Foana = default"
+        default: ""
       target_ci:
         description: "Janona raha ±Elo (95%) <= ity"
         default: "45"
@@ -46,11 +49,13 @@ jobs:
         run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/OwnUci.java
 
       - name: Calibrate vs Stockfish UCI_Elo=${{ matrix.level }}
+        env:
+          OPTS: ${{ inputs.opts }}
         run: |
           python3 tools/calibrate.py cls --levels ${{ matrix.level }} \
             --games ${{ inputs.games }} --movetime ${{ inputs.movetime }} \
             --target-ci ${{ inputs.target_ci }} --workers 2 \
-            --out calib-${{ matrix.level }}.json
+            --opts "$OPTS" --out calib-${{ matrix.level }}.json
 
       - uses: actions/upload-artifact@v4
         with:
