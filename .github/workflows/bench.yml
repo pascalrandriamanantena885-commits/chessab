@@ -1,5 +1,14 @@
 name: Bench (nps sy depth)
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      base_tgz:
+        description: "Dikan-teny taloha (.tgz). Foana = faharoa farany araka ny sort -V"
+        required: false
+        default: ""
+      runs:
+        description: "Isan'ny run mifandimby"
+        default: "5"
 
 permissions:
   contents: read
@@ -11,26 +20,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract project archive
+      - name: Extract base + new
+        env:
+          BASE_IN: ${{ github.event.inputs.base_tgz }}
         run: |
-          F=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
-          if [ -z "$F" ]; then echo "::error::Tsy hita ny project*.tgz"; ls -la; exit 1; fi
-          echo "Mampiasa $F"
-          tar xzf "$F"
+          set -e
+          LIST=$(ls project*.tgz 2>/dev/null | sort -V)
+          NEW=$(echo "$LIST" | tail -1)
+          if [ -n "$BASE_IN" ]; then BASE="$BASE_IN"; else BASE=$(echo "$LIST" | tail -2 | head -1); fi
+          if [ -z "$NEW" ] || [ -z "$BASE" ] || [ "$NEW" = "$BASE" ]; then
+            echo "::error::Mila project*.tgz roa samy hafa (taloha sy vaovao)"; ls -la; exit 1
+          fi
+          echo "BASE=$BASE  NEW=$NEW"
+          mkdir base new
+          tar xzf "$BASE" -C base
+          tar xzf "$NEW" -C new
 
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
 
-      - name: Compile
-        run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/Bench.java
-
-      - name: Bench
+      - name: Compile base + new
         run: |
-          java -cp cls mg.chess.offline.own.Bench 9 60 | tee bench.txt
-          {
-            echo '### JORO bench'
-            echo '```'
-            grep BENCH bench.txt
-            echo '```'
-            echo "nproc=$(nproc)"
-          } >> "$GITHUB_STEP_SUMMARY"
+          set -e
+          mkdir cls_base cls_new
+          javac -d cls_base base/app/src/main/java/mg/chess/offline/own/*.java base/tools/Bench.java
+          javac -d cls_new  new/app/src/main/java/mg/chess/offline/own/*.java  new/tools/Bench.java
+
+      - name: Bench taloha vs vaovao (mifandimby)
+        run: |
+          python3 new/tools/benchcmp.py cls_base cls_new --runs "${{ github.event.inputs.runs || '5' }}"
+          echo "nproc=$(nproc)" >> "$GITHUB_STEP_SUMMARY"
