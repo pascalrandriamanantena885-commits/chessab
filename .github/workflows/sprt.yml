@@ -1,4 +1,4 @@
-name: SPRT (vaovao vs taloha)
+name: SPRT (vaovao vs taloha) - matrix
 on:
   workflow_dispatch:
     inputs:
@@ -6,9 +6,20 @@ on:
         description: "Dikan-teny taloha (anaran'ny .tgz). Foana = faharoa farany araka ny sort -V"
         required: false
         default: ""
+      opts_base:
+        description: "Safidy UCI an'ny taloha (ohatra HashBits=19)"
+        required: false
+        default: ""
+      opts_new:
+        description: "Safidy UCI an'ny vaovao (ohatra ProbCut=1,CaptHist=1). Azo atao ny tgz mitovy raha misy safidy"
+        required: false
+        default: ""
+      shards:
+        description: "Job miaraka (JSON), ohatra [0,1,2,3]"
+        default: "[0,1,2,3]"
       games:
-        description: "Lalao ambony indrindra"
-        default: "3000"
+        description: "Lalao isaky ny job (isa mifandimby)"
+        default: "300"
       movetime:
         description: "ms isaky ny hetsika"
         default: "100"
@@ -18,12 +29,14 @@ on:
       elo1:
         description: "H1 (Elo)"
         default: "10"
-      opts_base:
-        description: "Safidy UCI an'ny taloha (ohatra HashBits=19)"
-        required: false
-        default: ""
-      opts_new:
-        description: "Safidy UCI an'ny vaovao (ohatra ProbCut=1,CaptHist=1). Azo atao ny tgz mitovy raha misy safidy"
+      alpha_beta:
+        description: "alpha = beta (0.05 henjana, 0.1 haingana)"
+        default: "0.05"
+      start_game:
+        description: "Hitohy: laharana lalao voalohany (jereo 'Hitohy' amin'ny summary teo aloha)"
+        default: "0"
+      prior:
+        description: "Hitohy: W,D,L teo aloha (ohatra 320,290,290), foana raha vaovao"
         required: false
         default: ""
 
@@ -31,9 +44,34 @@ permissions:
   contents: read
 
 jobs:
-  sprt:
+  perft:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract new
+        run: |
+          NEW=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
+          [ -n "$NEW" ] || { echo "::error::Tsy hita ny project*.tgz"; exit 1; }
+          mkdir new && tar xzf "$NEW" -C new
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: Perft gate (mijanona raha diso ny movegen)
+        run: |
+          set -e
+          mkdir cls_new
+          javac -d cls_new new/app/src/main/java/mg/chess/offline/own/*.java new/tools/Perft.java
+          java -cp cls_new mg.chess.offline.own.Perft | tee perft.txt
+          { echo '### Perft (vaovao)'; echo '```'; grep PERFT_SUMMARY perft.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  sprt:
+    needs: perft
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,22 +105,45 @@ jobs:
           set -e
           mkdir cls_base cls_new
           javac -d cls_base base/app/src/main/java/mg/chess/offline/own/*.java base/tools/OwnUci.java
-          javac -d cls_new  new/app/src/main/java/mg/chess/offline/own/*.java  new/tools/OwnUci.java new/tools/Perft.java
+          javac -d cls_new  new/app/src/main/java/mg/chess/offline/own/*.java  new/tools/OwnUci.java
 
-      - name: Perft gate (vaovao) - mijanona raha diso ny movegen
+      - name: SPRT shard ${{ matrix.shard }}
+        env:
+          GAMES: ${{ github.event.inputs.games }}
+          START: ${{ github.event.inputs.start_game }}
         run: |
-          set -e
-          java -cp cls_new mg.chess.offline.own.Perft | tee perft.txt
-          { echo '### Perft (vaovao)'; echo '```'; grep PERFT_SUMMARY perft.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: SPRT
-        run: |
+          FIRST=$(( START + ${{ matrix.shard }} * GAMES ))
           python3 new/tools/sprt.py cls_base cls_new \
-            --games "${{ github.event.inputs.games }}" \
+            --first-game "$FIRST" --games "$GAMES" \
             --movetime "${{ github.event.inputs.movetime }}" \
-            --elo0 "${{ github.event.inputs.elo0 }}" \
-            --elo1 "${{ github.event.inputs.elo1 }}" \
             --opts-base "${{ github.event.inputs.opts_base }}" \
             --opts-new "${{ github.event.inputs.opts_new }}" \
-            --workers 2 | tee sprt.txt || true
-          { echo '### SPRT'; echo '```'; tail -3 sprt.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            --workers 2 --out sprt-${{ matrix.shard }}.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sprt-${{ matrix.shard }}
+          path: sprt-${{ matrix.shard }}.json
+
+  summary:
+    needs: sprt
+    if: always() && needs.sprt.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract new
+        run: |
+          NEW=$(ls project*.tgz | sort -V | tail -1)
+          mkdir new && tar xzf "$NEW" -C new
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sprt-*
+          path: results
+          merge-multiple: true
+      - name: Fitambarana LLR
+        run: |
+          python3 new/tools/sprt.py --aggregate results \
+            --elo0 "${{ github.event.inputs.elo0 }}" --elo1 "${{ github.event.inputs.elo1 }}" \
+            --alpha "${{ github.event.inputs.alpha_beta }}" --beta "${{ github.event.inputs.alpha_beta }}" \
+            --prior "${{ github.event.inputs.prior }}"
