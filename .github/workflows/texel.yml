@@ -6,8 +6,8 @@ on:
         description: "Job miaraka amin'ny fanaovana data (JSON)"
         default: "[0,1,2,3,4,5,6,7]"
       games:
-        description: "Lalao isaky ny job (~0.4 s/lalao/core amin'ny depth 6)"
-        default: "4000"
+        description: "Lalao isaky ny job (~0.4 s/lalao/core amin'ny depth 6; 12000 lalao x 8 job ~ 4M toerana, ~40 min/job)"
+        default: "12000"
       depth:
         description: "Depth ny lalao self-play"
         default: "6"
@@ -15,8 +15,11 @@ on:
         description: "ms ambony indrindra isaky ny hetsika"
         default: "100"
       groups:
-        description: "Parameter hotombanana: val,pass,w,pst (pst = ~770 parameter, lava)"
-        default: "val,pass,w"
+        description: "Parameter hotombanana: val,pass,w,w2,w3,w4,pst (pst = ~770 parameter, mila data >= 3M toerana; w2/w3/w4 mampandeha ny Eval2/3/4 mandritra ny tuning)"
+        default: "val,pass,w,w3,w4"
+      maxpos:
+        description: "Fetra isan'ny toerana ampiasaina ao amin'ny tuning (0 = rehetra)"
+        default: "0"
       passes:
         description: "Isan'ny pass ambony indrindra"
         default: "8"
@@ -91,10 +94,11 @@ jobs:
           GROUPS_IN: ${{ github.event.inputs.groups }}
           PASSES: ${{ github.event.inputs.passes }}
           MINUTES: ${{ github.event.inputs.minutes }}
+          MAXPOS: ${{ github.event.inputs.maxpos }}
         run: |
           EXTRA=$(ls texel-extra*.gz 2>/dev/null || true)
           ls -la data
-          java -Xmx6g -Dgroups="$GROUPS_IN" -Dpasses="$PASSES" -Dminutes="$MINUTES" \
+          java -Xmx6g -Dgroups="$GROUPS_IN" -Dpasses="$PASSES" -Dminutes="$MINUTES" -Dmaxpos="$MAXPOS" \
             -cp cls mg.chess.offline.own.Texel tuned.txt data/*.gz $EXTRA | tee texel.log
           { echo '### Texel'; echo '```'; grep -E "DATA|^K=|PARAMS|PASS|FINAL" texel.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Apply + compile + perft
@@ -106,6 +110,14 @@ jobs:
           cp Eval.java chk/mg/chess/offline/own/Eval.java
           mkdir cls2 && javac -d cls2 chk/mg/chess/offline/own/*.java tools/Perft.java
           java -cp cls2 mg.chess.offline.own.Perft | grep PERFT_SUMMARY
+      - name: Mamoaka tgz vaovao (Eval voatombana)
+        run: |
+          NEW=$(ls project*.tgz | sort -V | tail -1)
+          mkdir proj && tar xzf "$NEW" -C proj
+          cp Eval.java proj/app/src/main/java/mg/chess/offline/own/Eval.java
+          echo "- Texel tuning (groups=${{ github.event.inputs.groups }}) avy amin'ny $NEW" >> proj/OWN_ENGINE.md
+          (cd proj && tar czf ../texel-tuned-project.tgz .)
+          ls -la texel-tuned-project.tgz
       - uses: actions/upload-artifact@v4
         with:
           name: texel-tuned
@@ -113,3 +125,4 @@ jobs:
             tuned.txt
             Eval.java
             texel.log
+            texel-tuned-project.tgz
