@@ -35,7 +35,7 @@ on:
         description: "Hitohy: laharana lalao voalohany. Fanombohana vaovao = 0 (jereo 'Hitohy' amin'ny summary teo aloha raha mitohy)"
         default: "0"
       prior:
-        description: "Hitohy: W,D,L teo aloha. FOANA raha fanombohana vaovao. Variant IRAY ihany (voasakana raha maromaro)"
+        description: "Hitohy: FOANA raha fanombohana vaovao. Variant IRAY: W,D,L. Variant maromaro: JSON {\"Iir=1\":\"399,457,344\",\"LmrCut=1\":\"412,421,367\"} (ny variant tsy ao dia tsy misy prior)"
         required: false
         default: ""
 
@@ -70,9 +70,14 @@ jobs:
         run: |
           N=$(printf '%s' "$VARIANTS" | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))')
           echo "variants=$N prior=[$PRIOR] start_game=$START"
-          if [ -n "$PRIOR" ] && [ "$N" -gt 1 ]; then
-            echo "::error::prior dia ho an'ny variant IRAY ihany; azafady fafao ny prior na variant iray ihany"; exit 1
-          fi
+          case "$PRIOR" in
+            "") ;;
+            "{"*) printf '%s' "$PRIOR" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert isinstance(d,dict); [list(map(int,v.split(","))) for v in d.values()]' \
+                    || { echo "::error::prior JSON tsy mety (ohatra {\"Iir=1\":\"399,457,344\"})"; exit 1; } ;;
+            *) if [ "$N" -gt 1 ]; then
+                 echo "::error::prior W,D,L dia ho an'ny variant IRAY; ho an'ny maromaro dia ampiasao JSON {variant: W,D,L}"; exit 1
+               fi ;;
+          esac
           if [ -n "$PRIOR" ] && [ "$START" = "0" ]; then
             echo "::warning::prior misy fa start_game=0: mety averina ny opening efa nampiasaina"
           fi
@@ -190,6 +195,10 @@ jobs:
           LABEL: ${{ matrix.variant }}
           PRIOR: ${{ github.event.inputs.prior }}
         run: |
+          case "$PRIOR" in
+            "{"*) PRIOR=$(printf '%s' "$PRIOR" | LABEL="$LABEL" python3 -c 'import sys,json,os; print(json.load(sys.stdin).get(os.environ["LABEL"],""))') ;;
+          esac
+          echo "prior ho an'ny [$LABEL] = [$PRIOR]"
           python3 new/tools/sprt.py --aggregate results \
             --elo0 "${{ github.event.inputs.elo0 }}" --elo1 "${{ github.event.inputs.elo1 }}" \
             --alpha "${{ github.event.inputs.alpha_beta }}" --beta "${{ github.event.inputs.alpha_beta }}" \
