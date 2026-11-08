@@ -1,0 +1,109 @@
+name: SPSA (tuning parameter)
+on:
+  workflow_dispatch:
+    inputs:
+      params:
+        description: "Lisitra JSON ny parameter (anarana UCI ao amin'ny Params.java, spin)"
+        default: '["RfpMargin","RfpMarginImp","RazorMargin","FutBase","FutMul","NmpBase","AspDelta","LmrBase","LmrDiv"]'
+      chains:
+        description: "Chain mahaleo tena miaraka (JSON), ohatra [0,1,2,3]; ny salanisan'izy ireo no vokatra"
+        default: "[0,1,2,3]"
+      iters:
+        description: "Iteration isaky ny chain"
+        default: "150"
+      pairs:
+        description: "Pair (2 lalao) isaky ny iteration"
+        default: "6"
+      movetime:
+        description: "ms isaky ny hetsika"
+        default: "100"
+      lr:
+        description: "Haavon'ny dingana voalohany (normalized)"
+        default: "0.05"
+      c:
+        description: "Perturbation voalohany (normalized, 0..1 an'ny sakany)"
+        default: "0.06"
+      start:
+        description: "Hitohy: JSON {anarana: sanda} avy amin'ny 'Hitohy: start=' teo aloha. Foana = default ao amin'ny motera"
+        required: false
+        default: ""
+      fixed_opts:
+        description: "Safidy UCI tsy miova ho an'ny roa tonta (ohatra HashBits=19). Foana = default"
+        required: false
+        default: ""
+      max_minutes:
+        description: "Fetra fotoana isaky ny chain (minitra); mijanona tsara ary mitahiry ny vokatra"
+        default: "320"
+
+permissions:
+  contents: read
+
+jobs:
+  spsa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        chain: ${{ fromJSON(inputs.chains) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract tgz farany
+        run: |
+          NEW=$(ls project*.tgz 2>/dev/null | sort -V | tail -1)
+          [ -n "$NEW" ] || { echo "::error::Tsy hita ny project*.tgz"; exit 1; }
+          echo "NEW=$NEW"
+          mkdir new && tar xzf "$NEW" -C new
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: Install python-chess
+        run: pip install chess
+      - name: Compile
+        run: |
+          set -e
+          mkdir cls
+          javac -d cls new/app/src/main/java/mg/chess/offline/own/*.java new/tools/OwnUci.java
+      - name: SPSA chain ${{ matrix.chain }}
+        env:
+          PARAMS: ${{ github.event.inputs.params }}
+          START: ${{ github.event.inputs.start }}
+          FIXED: ${{ github.event.inputs.fixed_opts }}
+          ITERS: ${{ github.event.inputs.iters }}
+          PAIRS: ${{ github.event.inputs.pairs }}
+          MT: ${{ github.event.inputs.movetime }}
+          LR: ${{ github.event.inputs.lr }}
+          C: ${{ github.event.inputs.c }}
+          MAXMIN: ${{ github.event.inputs.max_minutes }}
+          CHAIN: ${{ matrix.chain }}
+        run: |
+          python3 new/tools/spsa.py cls \
+            --params "$PARAMS" --start "$START" --fixed "$FIXED" \
+            --chain "$CHAIN" --iters "$ITERS" --pairs "$PAIRS" \
+            --movetime "$MT" --lr "$LR" --c "$C" --max-minutes "$MAXMIN" \
+            --workers 2 --out "spsa-$CHAIN.json" | tee "spsa-$CHAIN.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spsa-${{ matrix.chain }}
+          path: |
+            spsa-${{ matrix.chain }}.json
+            spsa-${{ matrix.chain }}.log
+
+  summary:
+    needs: spsa
+    if: always() && needs.spsa.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract tgz farany
+        run: |
+          NEW=$(ls project*.tgz | sort -V | tail -1)
+          mkdir new && tar xzf "$NEW" -C new
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: spsa-*
+          path: results
+          merge-multiple: true
+      - name: Fitambarana
+        run: python3 new/tools/spsa.py --aggregate results
