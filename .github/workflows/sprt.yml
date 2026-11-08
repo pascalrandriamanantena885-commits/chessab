@@ -12,7 +12,7 @@ on:
         default: ""
       variants:
         description: "Lisitra JSON: safidy UCI an'ny vaovao isaky ny SPRT. Ohatra [\"ProbCut=1\",\"CaptHist=1\",\"ContHist=1\"]. [\"\"] = tsy misy safidy"
-        default: '["Eval3=1"]'
+        default: '["JoroStyle=1,JoroHunt=1"]'
       shards:
         description: "Job miaraka isaky ny variant (JSON), ohatra [0,1,2,3]"
         default: "[0,1,2,3]"
@@ -23,21 +23,21 @@ on:
         description: "ms isaky ny hetsika"
         default: "100"
       elo0:
-        description: "H0 (Elo)"
-        default: "0"
+        description: "H0 (Elo). Ho an'ny fomba (tsy fihenan'ny hery): -8"
+        default: "-8"
       elo1:
-        description: "H1 (Elo)"
-        default: "10"
+        description: "H1 (Elo). Ho an'ny fomba (tsy fihenan'ny hery): 2"
+        default: "2"
       alpha_beta:
         description: "alpha = beta (0.05 henjana, 0.1 haingana)"
         default: "0.05"
       start_game:
-        description: "Hitohy: laharana lalao voalohany (jereo 'Hitohy' amin'ny summary teo aloha)"
-        default: "1200"
+        description: "Hitohy: laharana lalao voalohany. Fanombohana vaovao = 0 (jereo 'Hitohy' amin'ny summary teo aloha raha mitohy)"
+        default: "0"
       prior:
-        description: "Hitohy: W,D,L teo aloha. Ampiasaina rehefa variant IRAY ihany"
+        description: "Hitohy: W,D,L teo aloha. FOANA raha fanombohana vaovao. Variant IRAY ihany (voasakana raha maromaro)"
         required: false
-        default: "844,792,764"
+        default: ""
 
 permissions:
   contents: read
@@ -62,6 +62,20 @@ jobs:
           javac -d cls_new new/app/src/main/java/mg/chess/offline/own/*.java new/tools/Perft.java
           java -cp cls_new mg.chess.offline.own.Perft | tee perft.txt
           { echo '### Perft (vaovao)'; echo '```'; grep PERFT_SUMMARY perft.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Fanamarinana ny input (prior / variants)
+        env:
+          VARIANTS: ${{ github.event.inputs.variants }}
+          PRIOR: ${{ github.event.inputs.prior }}
+          START: ${{ github.event.inputs.start_game }}
+        run: |
+          N=$(printf '%s' "$VARIANTS" | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))')
+          echo "variants=$N prior=[$PRIOR] start_game=$START"
+          if [ -n "$PRIOR" ] && [ "$N" -gt 1 ]; then
+            echo "::error::prior dia ho an'ny variant IRAY ihany; azafady fafao ny prior na variant iray ihany"; exit 1
+          fi
+          if [ -n "$PRIOR" ] && [ "$START" = "0" ]; then
+            echo "::warning::prior misy fa start_game=0: mety averina ny opening efa nampiasaina"
+          fi
 
   sprt:
     needs: perft
