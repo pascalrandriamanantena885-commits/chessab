@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - name: Compile
-        run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/SelfPlay.java
+        run: rm -rf cls && mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/SelfPlay.java
       - name: Self-play shard ${{ matrix.shard }}
         env:
           GAMES: ${{ github.event.inputs.games }}
@@ -88,7 +88,7 @@ jobs:
           path: data
           merge-multiple: true
       - name: Compile
-        run: mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/Texel.java
+        run: rm -rf cls && mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/Texel.java
       - name: Tuning
         env:
           GROUPS_IN: ${{ github.event.inputs.groups }}
@@ -108,7 +108,7 @@ jobs:
           mkdir -p chk/mg/chess/offline/own
           cp app/src/main/java/mg/chess/offline/own/*.java chk/mg/chess/offline/own/
           cp Eval.java chk/mg/chess/offline/own/Eval.java
-          mkdir cls2 && javac -d cls2 chk/mg/chess/offline/own/*.java tools/Perft.java
+          rm -rf cls2 && mkdir cls2 && javac -d cls2 chk/mg/chess/offline/own/*.java tools/Perft.java
           java -cp cls2 mg.chess.offline.own.Perft | grep PERFT_SUMMARY
       - name: Mamoaka tgz vaovao (Eval voatombana)
         run: |
