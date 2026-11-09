@@ -20,6 +20,10 @@ on:
       maxpos:
         description: "Fetra isan'ny toerana ampiasaina ao amin'ny tuning (0 = rehetra)"
         default: "0"
+      prev_run_id:
+        description: "Safidy: laharana run Texel taloha (ao amin'ny URL: .../actions/runs/<ID>) mba hampiasana indray ny artifact texel-gen-* (tsy mila download/commit)"
+        required: false
+        default: ""
       jvm_extra:
         description: "Safidy JVM fanampiny, ohatra -Deval4=true (mampandeha Eval4 mandritra ny tuning 'pst')"
         required: false
@@ -36,6 +40,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   gen:
@@ -91,6 +96,14 @@ jobs:
           pattern: texel-gen-*
           path: data
           merge-multiple: true
+      - name: Data taloha (artifact texel-gen-* avy amin'ny run teo aloha)
+        if: ${{ github.event.inputs.prev_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: texel-gen-*
+          run-id: ${{ github.event.inputs.prev_run_id }}
+          github-token: ${{ github.token }}
+          path: data_old
       - name: Compile
         run: rm -rf cls && mkdir cls && javac -d cls app/src/main/java/mg/chess/offline/own/*.java tools/Texel.java
       - name: Tuning
@@ -102,9 +115,11 @@ jobs:
           JVM_EXTRA: ${{ github.event.inputs.jvm_extra }}
         run: |
           EXTRA=$(ls texel-extra*.gz 2>/dev/null || true)
+          OLD=$(ls data_old/*/*.gz 2>/dev/null || true)
+          echo "extra=[$EXTRA] old=[$(echo $OLD | wc -w) rakitra]"
           ls -la data
           java -Xmx6g -Dgroups="$GROUPS_IN" -Dpasses="$PASSES" -Dminutes="$MINUTES" -Dmaxpos="$MAXPOS" $JVM_EXTRA \
-            -cp cls mg.chess.offline.own.Texel tuned.txt data/*.gz $EXTRA | tee texel.log
+            -cp cls mg.chess.offline.own.Texel tuned.txt data/*.gz $EXTRA $OLD | tee texel.log
           { echo '### Texel'; echo '```'; grep -E "DATA|^K=|PARAMS|PASS|FINAL" texel.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Apply + compile + perft
         run: |
