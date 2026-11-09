@@ -4,7 +4,7 @@ on:
     inputs:
       levels:
         description: "UCI_Elo (JSON array)"
-        default: "[2400,2600,2800,3000]"
+        default: "[2600,2700,2800,2900]"
       games:
         description: "Lalao ambony indrindra isaky ny ambaratonga"
         default: "40"
@@ -12,7 +12,7 @@ on:
         description: "ms isaky ny hetsika"
         default: "1500"
       opts:
-        description: "Safidy UCI an'i JORO (ohatra Eval2=1,Eval3=1). Foana = default"
+        description: "Safidy UCI an'i JORO (ohatra Eval5=1). Foana = default"
         default: ""
       target_ci:
         description: "Janona raha ±Elo (95%) <= ity"
