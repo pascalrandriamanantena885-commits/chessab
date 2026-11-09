@@ -20,6 +20,10 @@ on:
       maxpos:
         description: "Fetra isan'ny toerana ampiasaina ao amin'ny tuning (0 = rehetra)"
         default: "0"
+      jvm_extra:
+        description: "Safidy JVM fanampiny, ohatra -Deval4=true (mampandeha Eval4 mandritra ny tuning 'pst')"
+        required: false
+        default: ""
       passes:
         description: "Isan'ny pass ambony indrindra"
         default: "8"
@@ -95,10 +99,11 @@ jobs:
           PASSES: ${{ github.event.inputs.passes }}
           MINUTES: ${{ github.event.inputs.minutes }}
           MAXPOS: ${{ github.event.inputs.maxpos }}
+          JVM_EXTRA: ${{ github.event.inputs.jvm_extra }}
         run: |
           EXTRA=$(ls texel-extra*.gz 2>/dev/null || true)
           ls -la data
-          java -Xmx6g -Dgroups="$GROUPS_IN" -Dpasses="$PASSES" -Dminutes="$MINUTES" -Dmaxpos="$MAXPOS" \
+          java -Xmx6g -Dgroups="$GROUPS_IN" -Dpasses="$PASSES" -Dminutes="$MINUTES" -Dmaxpos="$MAXPOS" $JVM_EXTRA \
             -cp cls mg.chess.offline.own.Texel tuned.txt data/*.gz $EXTRA | tee texel.log
           { echo '### Texel'; echo '```'; grep -E "DATA|^K=|PARAMS|PASS|FINAL" texel.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Apply + compile + perft
